@@ -41,11 +41,6 @@
   <img src="assets/screen2.png" width="45%">
 </p>
 
-<p align="center">
-  <img src="assets/demo_vectors.gif" width="45%">
-  <img src="assets/demo_energy.gif" width="45%">
-</p>
-
 ---
 
 ## 🚀 Возможности

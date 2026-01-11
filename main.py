@@ -50,12 +50,21 @@ btn_vectors = pygame.Rect(w - 210, 155, 190, 35)
 btn_same = pygame.Rect(w // 2 - 220, h // 2, 200, 45)
 btn_new = pygame.Rect(w // 2 + 20, h // 2, 200, 45)
 
+zoom = 1.0
+offset_x = 0
+offset_y = 0
+dragging = False
+drag_start_x = 0
+drag_start_y = 0
+
+def world_to_screen(x, y):
+    return (x - offset_x) * zoom + w // 2, (y - offset_y) * zoom + h // 2
+
+def screen_to_world(x, y):
+    return (x - w // 2) / zoom + offset_x, (y - h // 2) / zoom + offset_y
+
 def reset_simulation():
-    global ball_x, ball_y, angle_prev, orbits, orbit_timer, paused, collided, m_ball, m_planet, vx, vy
-    m_planet = float(inputs[0]) * 1000
-    m_ball = float(inputs[1])
-    vx = float(inputs[2])
-    vy = float(inputs[3])
+    global ball_x, ball_y, angle_prev, orbits, orbit_timer, paused, collided, m_ball, m_planet, vx, vy, zoom, offset_x, offset_y
     ball_x = start_ball_x
     ball_y = start_ball_y
     angle_prev = None
@@ -63,52 +72,84 @@ def reset_simulation():
     orbit_timer = 0
     paused = False
     collided = False
-
-def draw_vector(surface, start_pos, vector, color, scale=1.0):
-    if vector[0] == 0 and vector[1] == 0:
-        return
-        
-    end_x = start_pos[0] + vector[0] * scale
-    end_y = start_pos[1] + vector[1] * scale
-    
-    pygame.draw.line(surface, color, start_pos, (end_x, end_y), 2)
-    
-    angle = math.atan2(vector[1], vector[0])
-    arrow_length = 10
-    arrow_angle = math.pi / 6
-    
-    pygame.draw.line(surface, color, 
-                     (end_x, end_y),
-                     (end_x - arrow_length * math.cos(angle - arrow_angle),
-                      end_y - arrow_length * math.sin(angle - arrow_angle)), 2)
-    pygame.draw.line(surface, color,
-                     (end_x, end_y),
-                     (end_x - arrow_length * math.cos(angle + arrow_angle),
-                      end_y - arrow_length * math.sin(angle + arrow_angle)), 2)
+    zoom = 0.5 * 2
+    offset_x = 250
+    offset_y = 250
 
 running = True
 while running:
     dt = clock.tick(60) / 60
 
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    world_mouse_x, world_mouse_y = screen_to_world(mouse_x, mouse_y)
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
-        if collided or ask_restart:
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if btn_same.collidepoint(event.pos):
-                    reset_simulation()
-                    started = True
-                    ask_restart = False
-                    collided = False
-                if btn_new.collidepoint(event.pos):
-                    inputs = ["", "", "", ""]
-                    active = 0
-                    started = False
-                    ask_restart = False
-                    collided = False
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                if started and not collided and not ask_restart:
+                    if btn_restart.collidepoint(event.pos):
+                        ask_restart = True
+                    elif btn_random.collidepoint(event.pos):
+                        inputs[0] = str(round(random.uniform(4, 20), 1))
+                        inputs[1] = str(round(random.uniform(1, 20), 1))
+                        inputs[2] = str(round(random.uniform(0, 15), 1))
+                        inputs[3] = str(round(random.uniform(-15, 15), 1))
+                        m_planet = float(inputs[0]) * 1000
+                        m_ball = float(inputs[1])
+                        vx = float(inputs[2])
+                        vy = float(inputs[3])
+                        reset_simulation()
+                    elif btn_pause.collidepoint(event.pos):
+                        paused = not paused
+                    elif btn_vectors.collidepoint(event.pos):
+                        show_vectors = not show_vectors
+                    elif not (btn_restart.collidepoint(event.pos) or 
+                           btn_random.collidepoint(event.pos) or 
+                           btn_pause.collidepoint(event.pos) or 
+                           btn_vectors.collidepoint(event.pos)):
+                        dragging = True
+                        drag_start_x, drag_start_y = world_mouse_x, world_mouse_y
+                elif collided or ask_restart:
+                    if btn_same.collidepoint(event.pos):
+                        reset_simulation()
+                        started = True
+                        ask_restart = False
+                        collided = False
+                    elif btn_new.collidepoint(event.pos):
+                        inputs = ["", "", "", ""]
+                        active = 0
+                        started = False
+                        ask_restart = False
+                        collided = False
+            elif event.button == 4:
+                old_world_x, old_world_y = screen_to_world(mouse_x, mouse_y)
+                zoom *= 1.1
+                zoom = min(zoom, 10.0)
+                new_world_x, new_world_y = screen_to_world(mouse_x, mouse_y)
+                offset_x += old_world_x - new_world_x
+                offset_y += old_world_y - new_world_y
+            elif event.button == 5:
+                old_world_x, old_world_y = screen_to_world(mouse_x, mouse_y)
+                zoom /= 1.1
+                zoom = max(zoom, 0.1)
+                new_world_x, new_world_y = screen_to_world(mouse_x, mouse_y)
+                offset_x += old_world_x - new_world_x
+                offset_y += old_world_y - new_world_y
 
-        elif not started:
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                dragging = False
+
+        elif event.type == pygame.MOUSEMOTION:
+            if dragging:
+                current_world_x, current_world_y = screen_to_world(mouse_x, mouse_y)
+                offset_x += drag_start_x - current_world_x
+                offset_y += drag_start_y - current_world_y
+
+        if not started:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
                     if active < 3:
@@ -124,21 +165,6 @@ while running:
                     inputs[active] = inputs[active][:-1]
                 else:
                     inputs[active] += event.unicode
-
-        else:
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                if btn_restart.collidepoint(event.pos):
-                    ask_restart = True
-                if btn_random.collidepoint(event.pos):
-                    m_planet = random.uniform(4, 20) * 1000
-                    m_ball = random.uniform(1, 20)
-                    vx = random.uniform(0, 15)
-                    vy = random.uniform(-15, 15)
-                    reset_simulation()
-                if btn_pause.collidepoint(event.pos):
-                    paused = not paused
-                if btn_vectors.collidepoint(event.pos):
-                    show_vectors = not show_vectors
 
     if started and not paused and not ask_restart and not collided:
         dx = planet_x - ball_x
@@ -187,6 +213,9 @@ while running:
 
     screen.fill((0, 0, 0))
 
+    planet_screen_x, planet_screen_y = world_to_screen(planet_x, planet_y)
+    ball_screen_x, ball_screen_y = world_to_screen(ball_x, ball_y)
+
     if not started:
         for i in range(4):
             t = font.render(labels[i] + ": " + inputs[i], True, (255, 255, 255))
@@ -196,24 +225,69 @@ while running:
         screen.blit(font.render("Enter - дальше", True, (200, 200, 200)), (50, 230))
 
     else:
-        pygame.draw.circle(screen, (0, 0, 255), (planet_x, planet_y), planet_radius)
-        pygame.draw.circle(screen, (255, 0, 0), (int(ball_x), int(ball_y)), ball_radius)
+        scaled_planet_radius = max(1, int(planet_radius * zoom))
+        scaled_ball_radius = max(1, int(ball_radius * zoom))
+        
+        pygame.draw.circle(screen, (0, 0, 255), (int(planet_screen_x), int(planet_screen_y)), scaled_planet_radius)
+        pygame.draw.circle(screen, (255, 0, 0), (int(ball_screen_x), int(ball_screen_y)), scaled_ball_radius)
 
         if show_vectors and not collided:
-            draw_vector(screen, (ball_x, ball_y), (vx * 5, 0), (255, 0, 0))
+            screen_vx = vx * zoom
+            screen_vy = vy * zoom
             
-            draw_vector(screen, (ball_x, ball_y), (0, vy * 5), (0, 255, 0))
+            end_x = ball_screen_x + screen_vx * 5
+            end_y = ball_screen_y
+            pygame.draw.line(screen, (255, 0, 0), (ball_screen_x, ball_screen_y), (end_x, end_y), 2)
+            angle = math.atan2(0, screen_vx)
+            arrow_length = 10
+            arrow_angle = math.pi / 6
+            pygame.draw.line(screen, (255, 0, 0), 
+                             (end_x, end_y),
+                             (end_x - arrow_length * math.cos(angle - arrow_angle),
+                              end_y - arrow_length * math.sin(angle - arrow_angle)), 2)
+            pygame.draw.line(screen, (255, 0, 0),
+                             (end_x, end_y),
+                             (end_x - arrow_length * math.cos(angle + arrow_angle),
+                              end_y - arrow_length * math.sin(angle + arrow_angle)), 2)
+            
+            end_x = ball_screen_x
+            end_y = ball_screen_y + screen_vy * 5
+            pygame.draw.line(screen, (0, 255, 0), (ball_screen_x, ball_screen_y), (end_x, end_y), 2)
+            angle = math.atan2(screen_vy, 0)
+            arrow_length = 10
+            arrow_angle = math.pi / 6
+            pygame.draw.line(screen, (0, 255, 0), 
+                             (end_x, end_y),
+                             (end_x - arrow_length * math.cos(angle - arrow_angle),
+                              end_y - arrow_length * math.sin(angle - arrow_angle)), 2)
+            pygame.draw.line(screen, (0, 255, 0),
+                             (end_x, end_y),
+                             (end_x - arrow_length * math.cos(angle + arrow_angle),
+                              end_y - arrow_length * math.sin(angle + arrow_angle)), 2)
             
             if r > planet_radius + ball_radius:
                 F = G * m_planet * m_ball / (r * r)
-                force_x = F * dx / r / m_ball * 100
-                force_y = F * dy / r / m_ball * 100
-                draw_vector(screen, (ball_x, ball_y), (force_x, force_y), (0, 150, 255))
+                force_x = F * dx / r / m_ball * 100 * zoom
+                force_y = F * dy / r / m_ball * 100 * zoom
+                end_x = ball_screen_x + force_x
+                end_y = ball_screen_y + force_y
+                pygame.draw.line(screen, (0, 150, 255), (ball_screen_x, ball_screen_y), (end_x, end_y), 2)
+                angle = math.atan2(force_y, force_x)
+                arrow_length = 10
+                arrow_angle = math.pi / 6
+                pygame.draw.line(screen, (0, 150, 255), 
+                                 (end_x, end_y),
+                                 (end_x - arrow_length * math.cos(angle - arrow_angle),
+                                  end_y - arrow_length * math.sin(angle - arrow_angle)), 2)
+                pygame.draw.line(screen, (0, 150, 255),
+                                 (end_x, end_y),
+                                 (end_x - arrow_length * math.cos(angle + arrow_angle),
+                                  end_y - arrow_length * math.sin(angle + arrow_angle)), 2)
             
             vx_label = font.render(f"Vx: {vx:.1f}", True, (255, 0, 0))
             vy_label = font.render(f"Vy: {vy:.1f}", True, (0, 255, 0))
-            screen.blit(vx_label, (int(ball_x + vx * 5 + 5), int(ball_y - 10)))
-            screen.blit(vy_label, (int(ball_x + 5), int(ball_y + vy * 5 - 10)))
+            screen.blit(vx_label, (int(ball_screen_x + screen_vx * 5 + 5), int(ball_screen_y - 10)))
+            screen.blit(vy_label, (int(ball_screen_x + 5), int(ball_screen_y + screen_vy * 5 - 10)))
 
         info = [
             f"R: {r:.2f}",
@@ -224,7 +298,9 @@ while running:
             f"Eп: {potential:.2f}",
             f"E: {total_energy:.2f}",
             f"Обороты: {orbits}",
-            f"Время: {orbit_timer:.1f}"
+            f"Время: {orbit_timer:.1f}",
+            f"Масштаб: {zoom:.2f}x",
+            f"Смещение: {offset_x:.0f}, {offset_y:.0f}"
         ]
 
         for i, t in enumerate(info):
@@ -237,7 +313,7 @@ while running:
             pygame.draw.rect(screen, (60, 60, 60), btn_vectors)
 
             screen.blit(font.render("Начать заново", True, (255, 255, 255)), (btn_restart.x + 20, btn_restart.y + 8))
-            screen.blit(font.render("Случайные (не воркает)", True, (255, 255, 255)), (btn_random.x + 40, btn_random.y + 8)) # не воркает
+            screen.blit(font.render("Случайные", True, (255, 255, 255)), (btn_random.x + 40, btn_random.y + 8))
             screen.blit(font.render("Пауза" if not paused else "Продолжить", True, (255, 255, 255)),
                         (btn_pause.x + 25, btn_pause.y + 8))
             screen.blit(font.render("Скрыть вектора" if show_vectors else "Показать вектора", 

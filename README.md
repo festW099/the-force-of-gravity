@@ -162,6 +162,3 @@ python main.py
 <p align="center">
   <sub>Made with, Python & Physics</sub>
 </p>
-```
-
----

@@ -32,8 +32,10 @@ started = False
 paused = False
 ask_restart = False
 collided = False
+show_vectors = True
 
 vx = vy = 0
+ax = ay = 0
 m_planet = m_ball = 0
 
 angle_prev = None
@@ -43,6 +45,7 @@ orbit_timer = 0
 btn_restart = pygame.Rect(w - 210, 20, 190, 35)
 btn_random = pygame.Rect(w - 210, 65, 190, 35)
 btn_pause = pygame.Rect(w - 210, 110, 190, 35)
+btn_vectors = pygame.Rect(w - 210, 155, 190, 35)
 
 btn_same = pygame.Rect(w // 2 - 220, h // 2, 200, 45)
 btn_new = pygame.Rect(w // 2 + 20, h // 2, 200, 45)
@@ -60,6 +63,28 @@ def reset_simulation():
     orbit_timer = 0
     paused = False
     collided = False
+
+def draw_vector(surface, start_pos, vector, color, scale=1.0):
+    if vector[0] == 0 and vector[1] == 0:
+        return
+        
+    end_x = start_pos[0] + vector[0] * scale
+    end_y = start_pos[1] + vector[1] * scale
+    
+    pygame.draw.line(surface, color, start_pos, (end_x, end_y), 2)
+    
+    angle = math.atan2(vector[1], vector[0])
+    arrow_length = 10
+    arrow_angle = math.pi / 6
+    
+    pygame.draw.line(surface, color, 
+                     (end_x, end_y),
+                     (end_x - arrow_length * math.cos(angle - arrow_angle),
+                      end_y - arrow_length * math.sin(angle - arrow_angle)), 2)
+    pygame.draw.line(surface, color,
+                     (end_x, end_y),
+                     (end_x - arrow_length * math.cos(angle + arrow_angle),
+                      end_y - arrow_length * math.sin(angle + arrow_angle)), 2)
 
 running = True
 while running:
@@ -112,6 +137,8 @@ while running:
                     reset_simulation()
                 if btn_pause.collidepoint(event.pos):
                     paused = not paused
+                if btn_vectors.collidepoint(event.pos):
+                    show_vectors = not show_vectors
 
     if started and not paused and not ask_restart and not collided:
         dx = planet_x - ball_x
@@ -172,6 +199,22 @@ while running:
         pygame.draw.circle(screen, (0, 0, 255), (planet_x, planet_y), planet_radius)
         pygame.draw.circle(screen, (255, 0, 0), (int(ball_x), int(ball_y)), ball_radius)
 
+        if show_vectors and not collided:
+            draw_vector(screen, (ball_x, ball_y), (vx * 5, 0), (255, 0, 0))
+            
+            draw_vector(screen, (ball_x, ball_y), (0, vy * 5), (0, 255, 0))
+            
+            if r > planet_radius + ball_radius:
+                F = G * m_planet * m_ball / (r * r)
+                force_x = F * dx / r / m_ball * 100
+                force_y = F * dy / r / m_ball * 100
+                draw_vector(screen, (ball_x, ball_y), (force_x, force_y), (0, 150, 255))
+            
+            vx_label = font.render(f"Vx: {vx:.1f}", True, (255, 0, 0))
+            vy_label = font.render(f"Vy: {vy:.1f}", True, (0, 255, 0))
+            screen.blit(vx_label, (int(ball_x + vx * 5 + 5), int(ball_y - 10)))
+            screen.blit(vy_label, (int(ball_x + 5), int(ball_y + vy * 5 - 10)))
+
         info = [
             f"R: {r:.2f}",
             f"Vx: {vx:.2f}",
@@ -191,11 +234,14 @@ while running:
             pygame.draw.rect(screen, (60, 60, 60), btn_restart)
             pygame.draw.rect(screen, (60, 60, 60), btn_random)
             pygame.draw.rect(screen, (60, 60, 60), btn_pause)
+            pygame.draw.rect(screen, (60, 60, 60), btn_vectors)
 
             screen.blit(font.render("Начать заново", True, (255, 255, 255)), (btn_restart.x + 20, btn_restart.y + 8))
-            screen.blit(font.render("Случайные", True, (255, 255, 255)), (btn_random.x + 40, btn_random.y + 8))
+            screen.blit(font.render("Случайные (не воркает)", True, (255, 255, 255)), (btn_random.x + 40, btn_random.y + 8)) # не воркает
             screen.blit(font.render("Пауза" if not paused else "Продолжить", True, (255, 255, 255)),
                         (btn_pause.x + 25, btn_pause.y + 8))
+            screen.blit(font.render("Скрыть вектора" if show_vectors else "Показать вектора", 
+                                   True, (255, 255, 255)), (btn_vectors.x + 25, btn_vectors.y + 8))
 
         if collided or ask_restart:
             s = pygame.Surface((w, h), pygame.SRCALPHA)
